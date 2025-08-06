@@ -912,6 +912,8 @@ type DecOptions struct {
 	// implement json.Unmarshaler but do not also implement cbor.Unmarshaler. If nil, decoding
 	// behavior is not influenced by whether or not a type implements json.Unmarshaler.
 	JSONUnmarshalerTranscoder Transcoder
+
+	Float64Only bool
 }
 
 // DecMode returns DecMode with immutable options and no tags (safe for concurrency).
@@ -1157,6 +1159,7 @@ func (opts DecOptions) decMode() (*decMode, error) { //nolint:gocritic // ignore
 		binaryUnmarshaler:         opts.BinaryUnmarshaler,
 		textUnmarshaler:           opts.TextUnmarshaler,
 		jsonUnmarshalerTranscoder: opts.JSONUnmarshalerTranscoder,
+		float64Only:               opts.Float64Only,
 	}
 
 	return &dm, nil
@@ -1238,6 +1241,7 @@ type decMode struct {
 	binaryUnmarshaler         BinaryUnmarshalerMode
 	textUnmarshaler           TextUnmarshalerMode
 	jsonUnmarshalerTranscoder Transcoder
+	float64Only               bool
 }
 
 var defaultDecMode, _ = DecOptions{}.decMode()
@@ -1280,6 +1284,7 @@ func (dm *decMode) DecOptions() DecOptions {
 		BinaryUnmarshaler:         dm.binaryUnmarshaler,
 		TextUnmarshaler:           dm.textUnmarshaler,
 		JSONUnmarshalerTranscoder: dm.jsonUnmarshalerTranscoder,
+		Float64Only:               dm.float64Only,
 	}
 }
 
@@ -1583,10 +1588,22 @@ func (d *decoder) parseToValue(v reflect.Value, tInfo *typeInfo) error { //nolin
 		_, ai, val := d.getHead()
 		switch ai {
 		case additionalInformationAsFloat16:
+			if d.dm.float64Only {
+				return &UnacceptableDataItemError{
+					CBORType: t.String(),
+					Message:  "float smaller than 64 bits",
+				}
+			}
 			f := float64(float16.Frombits(uint16(val)).Float32())
 			return fillFloat(t, f, v)
 
 		case additionalInformationAsFloat32:
+			if d.dm.float64Only {
+				return &UnacceptableDataItemError{
+					CBORType: t.String(),
+					Message:  "float smaller than 64 bits",
+				}
+			}
 			f := float64(math.Float32frombits(uint32(val)))
 			return fillFloat(t, f, v)
 
@@ -2165,10 +2182,22 @@ func (d *decoder) parse(skipSelfDescribedTag bool) (any, error) { //nolint:gocyc
 			return nil, nil
 
 		case additionalInformationAsFloat16:
+			if d.dm.float64Only {
+				return nil, &UnacceptableDataItemError{
+					CBORType: t.String(),
+					Message:  "float smaller than 64 bits",
+				}
+			}
 			f := float64(float16.Frombits(uint16(val)).Float32())
 			return f, nil
 
 		case additionalInformationAsFloat32:
+			if d.dm.float64Only {
+				return nil, &UnacceptableDataItemError{
+					CBORType: t.String(),
+					Message:  "float smaller than 64 bits",
+				}
+			}
 			f := float64(math.Float32frombits(uint32(val)))
 			return f, nil
 
