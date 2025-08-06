@@ -617,6 +617,8 @@ type EncOptions struct {
 	JSONMarshalerTranscoder Transcoder
 
 	MapKeyStringOnly bool
+
+	SimpleValues *SimpleValueRegistry
 }
 
 // CanonicalEncOptions returns EncOptions for "Canonical CBOR" encoding,
@@ -852,6 +854,7 @@ func (opts EncOptions) encMode() (*encMode, error) { //nolint:gocritic // ignore
 		textMarshaler:             opts.TextMarshaler,
 		jsonMarshalerTranscoder:   opts.JSONMarshalerTranscoder,
 		mapKeyStringOnly:          opts.MapKeyStringOnly,
+		simpleValues:              opts.SimpleValues,
 	}
 	return &em, nil
 }
@@ -900,6 +903,7 @@ type encMode struct {
 	textMarshaler             TextMarshalerMode
 	jsonMarshalerTranscoder   Transcoder
 	mapKeyStringOnly          bool
+	simpleValues              *SimpleValueRegistry
 }
 
 var defaultEncMode, _ = EncOptions{}.encMode()
@@ -995,6 +999,7 @@ func (em *encMode) EncOptions() EncOptions {
 		TextMarshaler:           em.textMarshaler,
 		JSONMarshalerTranscoder: em.jsonMarshalerTranscoder,
 		MapKeyStringOnly:        em.mapKeyStringOnly,
+		SimpleValues:            em.simpleValues,
 	}
 }
 
@@ -1900,6 +1905,19 @@ func encodeMarshalerType(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 	return nil
 }
 
+func encodeSimpleValue(e *bytes.Buffer, em *encMode, v reflect.Value) error {
+	sv, _ := v.Interface().(SimpleValue)
+	if em.simpleValues != nil && em.simpleValues.rejected[sv] {
+		return &UnsupportedValueError{fmt.Sprintf("simple value %d is not allowed", sv)}
+	}
+	data, err := sv.MarshalCBOR()
+	if err != nil {
+		return err
+	}
+	e.Write(data)
+	return nil
+}
+
 func encodeTag(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 	if em.tagsMd == TagsForbidden {
 		return errors.New("cbor: cannot encode cbor.Tag when TagsMd is TagsForbidden")
@@ -1995,7 +2013,7 @@ func getEncodeFuncInternal(t reflect.Type) (ef encodeFunc, ief isEmptyFunc, izf 
 	}
 	switch t {
 	case typeSimpleValue:
-		return encodeMarshalerType, isEmptyUint, getIsZeroFunc(t)
+		return encodeSimpleValue, isEmptyUint, getIsZeroFunc(t)
 
 	case typeTag:
 		return encodeTag, alwaysNotEmpty, getIsZeroFunc(t)
