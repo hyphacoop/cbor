@@ -381,6 +381,10 @@ const (
 	// BigIntConvertReject returns an UnsupportedTypeError instead of marshaling a big.Int.
 	BigIntConvertReject
 
+	// BigIntConvertOnly encodes the big.Int as a CBOR integer if the value fits,
+	// and otherwise returns an UnsupportedTypeError.
+	BigIntConvertOnly
+
 	maxBigIntConvert
 )
 
@@ -1688,7 +1692,7 @@ func encodeBigInt(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 		bi.Sub(bi, big.NewInt(1))
 	}
 
-	if em.bigIntConvert == BigIntConvertShortest {
+	if em.bigIntConvert == BigIntConvertShortest || em.bigIntConvert == BigIntConvertOnly {
 		if bi.IsUint64() {
 			if sign >= 0 {
 				// Encode as CBOR pos int (major type 0)
@@ -1698,6 +1702,9 @@ func encodeBigInt(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 			// Encode as CBOR neg int (major type 1)
 			encodeHead(e, byte(cborTypeNegativeInt), bi.Uint64())
 			return nil
+		} else if em.bigIntConvert == BigIntConvertOnly {
+			// Can't be represented as a uint64, and that's not allowed
+			return &UnsupportedValueError{fmt.Sprintf("big.Int that doesn't fit in a CBOR integer: %s", vbi.String())}
 		}
 	}
 
