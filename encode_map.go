@@ -65,28 +65,34 @@ func (me *mapKeyValueEncodeFunc) encodeKeyValues(e *bytes.Buffer, em *encMode, v
 }
 
 func getEncodeMapFunc(t reflect.Type) encodeFunc {
-	kf, _, _ := getEncodeFunc(t.Key())
-	ef, _, _ := getEncodeFunc(t.Elem())
-	if kf == nil || ef == nil {
-		return nil
-	}
-	mkv := &mapKeyValueEncodeFunc{
-		kf: kf,
-		ef: ef,
-		kpool: sync.Pool{
-			New: func() any {
-				rk := reflect.New(t.Key()).Elem()
-				return &rk
+	return func(e *bytes.Buffer, em *encMode, v reflect.Value) error {
+		if em.mapKeyStringOnly && t.Key().Kind() != reflect.String {
+			return &UnsupportedTypeError{t}
+		}
+
+		kf, _, _ := getEncodeFunc(t.Key())
+		ef, _, _ := getEncodeFunc(t.Elem())
+		if kf == nil || ef == nil {
+			return nil
+		}
+		mkv := &mapKeyValueEncodeFunc{
+			kf: kf,
+			ef: ef,
+			kpool: sync.Pool{
+				New: func() any {
+					rk := reflect.New(t.Key()).Elem()
+					return &rk
+				},
 			},
-		},
-		vpool: sync.Pool{
-			New: func() any {
-				rv := reflect.New(t.Elem()).Elem()
-				return &rv
+			vpool: sync.Pool{
+				New: func() any {
+					rv := reflect.New(t.Elem()).Elem()
+					return &rv
+				},
 			},
-		},
+		}
+		return mapEncodeFunc{
+			e: mkv.encodeKeyValues,
+		}.encode(e, em, v)
 	}
-	return mapEncodeFunc{
-		e: mkv.encodeKeyValues,
-	}.encode
 }

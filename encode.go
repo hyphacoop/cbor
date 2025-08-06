@@ -615,6 +615,8 @@ type EncOptions struct {
 	// json.Marshaler but do not also implement cbor.Marshaler. If nil, encoding behavior is not
 	// influenced by whether or not a type implements json.Marshaler.
 	JSONMarshalerTranscoder Transcoder
+
+	MapKeyStringOnly bool
 }
 
 // CanonicalEncOptions returns EncOptions for "Canonical CBOR" encoding,
@@ -849,6 +851,7 @@ func (opts EncOptions) encMode() (*encMode, error) { //nolint:gocritic // ignore
 		binaryMarshaler:           opts.BinaryMarshaler,
 		textMarshaler:             opts.TextMarshaler,
 		jsonMarshalerTranscoder:   opts.JSONMarshalerTranscoder,
+		mapKeyStringOnly:          opts.MapKeyStringOnly,
 	}
 	return &em, nil
 }
@@ -896,6 +899,7 @@ type encMode struct {
 	binaryMarshaler           BinaryMarshalerMode
 	textMarshaler             TextMarshalerMode
 	jsonMarshalerTranscoder   Transcoder
+	mapKeyStringOnly          bool
 }
 
 var defaultEncMode, _ = EncOptions{}.encMode()
@@ -990,6 +994,7 @@ func (em *encMode) EncOptions() EncOptions {
 		BinaryMarshaler:         em.binaryMarshaler,
 		TextMarshaler:           em.textMarshaler,
 		JSONMarshalerTranscoder: em.jsonMarshalerTranscoder,
+		MapKeyStringOnly:        em.mapKeyStringOnly,
 	}
 }
 
