@@ -619,6 +619,8 @@ type EncOptions struct {
 	MapKeyStringOnly bool
 
 	SimpleValues *SimpleValueRegistry
+
+	Float64Only bool
 }
 
 // CanonicalEncOptions returns EncOptions for "Canonical CBOR" encoding,
@@ -855,6 +857,7 @@ func (opts EncOptions) encMode() (*encMode, error) { //nolint:gocritic // ignore
 		jsonMarshalerTranscoder:   opts.JSONMarshalerTranscoder,
 		mapKeyStringOnly:          opts.MapKeyStringOnly,
 		simpleValues:              opts.SimpleValues,
+		float64Only:               opts.Float64Only,
 	}
 	return &em, nil
 }
@@ -904,6 +907,7 @@ type encMode struct {
 	jsonMarshalerTranscoder   Transcoder
 	mapKeyStringOnly          bool
 	simpleValues              *SimpleValueRegistry
+	float64Only               bool
 }
 
 var defaultEncMode, _ = EncOptions{}.encMode()
@@ -1000,6 +1004,7 @@ func (em *encMode) EncOptions() EncOptions {
 		JSONMarshalerTranscoder: em.jsonMarshalerTranscoder,
 		MapKeyStringOnly:        em.mapKeyStringOnly,
 		SimpleValues:            em.simpleValues,
+		Float64Only:             em.float64Only,
 	}
 }
 
@@ -1134,7 +1139,7 @@ func encodeFloat(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 		return encodeInf(e, em, v)
 	}
 	fopt := em.shortestFloat
-	if v.Kind() == reflect.Float64 && (fopt == ShortestFloatNone || cannotFitFloat32(f64)) {
+	if (v.Kind() == reflect.Float64 && (fopt == ShortestFloatNone || cannotFitFloat32(f64))) || em.float64Only {
 		// Encode float64
 		// Don't use encodeFloat64() because it cannot be inlined.
 		const argumentSize = 8
