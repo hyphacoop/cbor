@@ -353,6 +353,9 @@ const (
 	// TagsForbidden disallows CBOR tags.
 	TagsForbidden
 
+	// TagsLimited only allows tags that have been provided in a TagSet.
+	TagsLimited
+
 	maxTagsMode
 )
 

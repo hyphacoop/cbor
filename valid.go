@@ -173,9 +173,24 @@ func (d *decoder) wellformedInternal(depth int, checkBuiltinTags bool) (int, err
 	case cborTypeTag:
 		if d.dm.tagsMd == TagsForbidden {
 			return 0, &TagsMdError{}
+		} else if d.dm.tagsMd == TagsLimited && d.dm.tags == nil {
+			// Only registered tags are allowed but no tags are registered
+			return 0, &UnacceptableDataItemError{
+				cborTypeTag.String(),
+				"TagsLimited means only registered tags are allowed",
+			}
 		}
 
 		tagNum := val
+
+		// TODO: this doesn't account for nested tag numbers
+		if d.dm.tagsMd == TagsLimited && d.dm.tags.getTypeFromTagNum([]uint64{tagNum}) == nil {
+			// This tag number is not registered
+			return 0, &UnacceptableDataItemError{
+				cborTypeTag.String(),
+				"TagsLimited means only registered tags are allowed",
+			}
+		}
 
 		// Scan nested tag numbers to avoid recursion.
 		for {
