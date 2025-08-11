@@ -930,6 +930,10 @@ type DecOptions struct {
 	JSONUnmarshalerTranscoder Transcoder
 
 	Float64Only bool
+
+	// Enforce preferred encoding for integers (including tag numbers and item lengths) by
+	// returning an error when decoding integers encoded in wider representations than necessary.
+	EnforceIntPrefEnc bool
 }
 
 // DecMode returns DecMode with immutable options and no tags (safe for concurrency).
@@ -1176,6 +1180,7 @@ func (opts DecOptions) decMode() (*decMode, error) { //nolint:gocritic // ignore
 		textUnmarshaler:           opts.TextUnmarshaler,
 		jsonUnmarshalerTranscoder: opts.JSONUnmarshalerTranscoder,
 		float64Only:               opts.Float64Only,
+		enforceIntPrefEnc:         opts.EnforceIntPrefEnc,
 	}
 
 	return &dm, nil
@@ -1258,6 +1263,7 @@ type decMode struct {
 	textUnmarshaler           TextUnmarshalerMode
 	jsonUnmarshalerTranscoder Transcoder
 	float64Only               bool
+	enforceIntPrefEnc         bool
 }
 
 var defaultDecMode, _ = DecOptions{}.decMode()
@@ -1301,6 +1307,7 @@ func (dm *decMode) DecOptions() DecOptions {
 		TextUnmarshaler:           dm.textUnmarshaler,
 		JSONUnmarshalerTranscoder: dm.jsonUnmarshalerTranscoder,
 		Float64Only:               dm.float64Only,
+		EnforceIntPrefEnc:         dm.enforceIntPrefEnc,
 	}
 }
 

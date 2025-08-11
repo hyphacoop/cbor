@@ -100,9 +100,41 @@ func (d *decoder) wellformed(allowExtraData bool, checkBuiltinTags bool) error {
 
 // wellformedInternal checks data's well-formedness and returns max depth and error.
 func (d *decoder) wellformedInternal(depth int, checkBuiltinTags bool) (int, error) { //nolint:gocyclo
-	t, _, val, indefiniteLength, err := d.wellformedHeadWithIndefiniteLengthFlag()
+	t, ai, val, indefiniteLength, err := d.wellformedHeadWithIndefiniteLengthFlag()
 	if err != nil {
 		return 0, err
+	}
+
+	if d.dm.enforceIntPrefEnc && !indefiniteLength && t != cborTypePrimitives {
+		// val is the integer, the string length, the tag num, etc
+		// ai is "additional information": https://www.rfc-editor.org/rfc/rfc8949.html#section-3
+
+		if ai > maxAdditionalInformationWithoutArgument {
+			// val is not in the smallest possible encoding, so check
+
+			// https://www.rfc-editor.org/rfc/rfc8949.html#section-4.2.1
+			// Note this seamlessly handles negative numbers as well
+			switch ai {
+			case additionalInformationWith1ByteArgument:
+				if val <= 23 {
+					return 0, &UnacceptableDataItemError{t.String(), "integer not in smallest encoding"}
+				}
+			case additionalInformationWith2ByteArgument:
+				if val <= 255 {
+					return 0, &UnacceptableDataItemError{t.String(), "integer not in smallest encoding"}
+				}
+			case additionalInformationWith4ByteArgument:
+				if val <= 65535 {
+					return 0, &UnacceptableDataItemError{t.String(), "integer not in smallest encoding"}
+				}
+			case additionalInformationWith8ByteArgument:
+				if val <= 4294967295 {
+					return 0, &UnacceptableDataItemError{t.String(), "integer not in smallest encoding"}
+				}
+			default:
+				panic("cbor: wellformedInternal: shouldn't be here!")
+			}
+		}
 	}
 
 	switch t {
