@@ -214,6 +214,7 @@ func (d *decoder) wellformedInternal(depth int, checkBuiltinTags bool) (int, err
 		}
 
 		tagNum := val
+		tagNums := []uint64{tagNum}
 
 		// Scan nested tag numbers to avoid recursion.
 		for {
@@ -227,7 +228,7 @@ func (d *decoder) wellformedInternal(depth int, checkBuiltinTags bool) (int, err
 				}
 			}
 
-			// TODO: this doesn't account for nested tag numbers, maybe?
+			// Fast path for one specific tag num
 			if d.dm.tagsMd == TagsLimited && d.dm.tags.getTypeFromTagNum([]uint64{tagNum}) == nil {
 				// This tag number is not registered
 				return 0, &UnacceptableDataItemError{
@@ -248,11 +249,22 @@ func (d *decoder) wellformedInternal(depth int, checkBuiltinTags bool) (int, err
 			if _, _, tagNum, err = d.wellformedHead(); err != nil {
 				return 0, err
 			}
+			tagNums = append(tagNums, tagNum)
 			depth++
 			if depth > d.dm.maxNestedLevels {
 				return 0, &MaxNestedLevelError{d.dm.maxNestedLevels}
 			}
 		}
+
+		// Do proper check of nested tag numbers
+		if d.dm.tagsMd == TagsLimited && d.dm.tags.getTypeFromTagNum(tagNums) == nil {
+			// Not registered
+			return 0, &UnacceptableDataItemError{
+				cborTypeTag.String(),
+				"TagsLimited means only registered tags are allowed",
+			}
+		}
+
 		// Check tag content.
 		return d.wellformedInternal(depth, checkBuiltinTags)
 	}
