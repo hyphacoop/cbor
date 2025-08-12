@@ -935,8 +935,9 @@ type DecOptions struct {
 	// returning an error when decoding integers encoded in wider representations than necessary.
 	EnforceIntPrefEnc bool
 
-	// Reject null map keys (only if DefaultMapType is set)
-	RejectMapNullKey bool
+	// Reject in-exact map keys (only if DefaultMapType is set).
+	// This means null and tags will be rejected.
+	MapKeyTypeStrict bool
 
 	DisableKeyAsInt bool
 
@@ -1190,7 +1191,7 @@ func (opts DecOptions) decMode() (*decMode, error) { //nolint:gocritic // ignore
 		jsonUnmarshalerTranscoder: opts.JSONUnmarshalerTranscoder,
 		float64Only:               opts.Float64Only,
 		enforceIntPrefEnc:         opts.EnforceIntPrefEnc,
-		rejectMapNullKey:          opts.RejectMapNullKey,
+		mapKeyTypeStrict:          opts.MapKeyTypeStrict,
 		disableKeyAsInt:           opts.DisableKeyAsInt,
 		enforceSort:               opts.EnforceSort,
 	}
@@ -1276,7 +1277,7 @@ type decMode struct {
 	jsonUnmarshalerTranscoder Transcoder
 	float64Only               bool
 	enforceIntPrefEnc         bool
-	rejectMapNullKey          bool
+	mapKeyTypeStrict          bool
 	disableKeyAsInt           bool
 	enforceSort               bool
 }
@@ -1323,7 +1324,7 @@ func (dm *decMode) DecOptions() DecOptions {
 		JSONUnmarshalerTranscoder: dm.jsonUnmarshalerTranscoder,
 		Float64Only:               dm.float64Only,
 		EnforceIntPrefEnc:         dm.enforceIntPrefEnc,
-		RejectMapNullKey:          dm.rejectMapNullKey,
+		MapKeyTypeStrict:          dm.mapKeyTypeStrict,
 		DisableKeyAsInt:           dm.disableKeyAsInt,
 		EnforceSort:               dm.enforceSort,
 	}
@@ -2571,8 +2572,13 @@ func (d *decoder) parseMapToMap(v reflect.Value, tInfo *typeInfo) error { //noli
 			keyValue.SetZero()
 		}
 
-		if d.dm.rejectMapNullKey && d.nextCBORNil() {
-			return &InvalidMapKeyTypeError{"null (due to RejectMapNullKey)"}
+		if d.dm.mapKeyTypeStrict {
+			if d.nextCBORNil() {
+				return &InvalidMapKeyTypeError{"null (due to MapKeyTypeStrict)"}
+			}
+			if getType(d.data[d.off]) == cborTypeTag {
+				return &InvalidMapKeyTypeError{"tag (due to MapKeyTypeStrict)"}
+			}
 		}
 
 		if d.dm.enforceSort {
