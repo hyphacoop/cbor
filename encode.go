@@ -358,6 +358,9 @@ const (
 	// representing UTC time using nanosecond precision in RFC3339 format.
 	TimeRFC3339NanoUTC
 
+	// TimeModeReject returns an UnsupportedTypeError instead of marshaling a time.Time.
+	TimeModeReject
+
 	maxTimeMode
 )
 
@@ -1658,6 +1661,10 @@ func encodeIntf(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 }
 
 func encodeTime(e *bytes.Buffer, em *encMode, v reflect.Value) error {
+	if em.time == TimeModeReject {
+		return &UnsupportedTypeError{typeTime}
+	}
+
 	t := v.Interface().(time.Time)
 	if t.IsZero() {
 		e.Write(cborNil) // Even if tag is required, encode as CBOR null.
@@ -1894,8 +1901,8 @@ func (jme jsonMarshalerEncoder) isEmpty(em *encMode, v reflect.Value) (bool, err
 }
 
 func encodeMarshalerType(e *bytes.Buffer, em *encMode, v reflect.Value) error {
-	if em.tagsMd == TagsForbidden && v.Type() == typeRawTag {
-		return errors.New("cbor: cannot encode cbor.RawTag when TagsMd is TagsForbidden")
+	if (em.tagsMd == TagsForbidden || em.tagsMd == TagsLimited) && v.Type() == typeRawTag {
+		return errors.New("cbor: cannot encode cbor.RawTag when TagsMd is TagsForbidden or TagsLimited")
 	}
 	m, ok := v.Interface().(Marshaler)
 	if !ok {
