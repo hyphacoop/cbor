@@ -944,6 +944,10 @@ type DecOptions struct {
 	// EnforceSort rejects maps that are not sorted in bytewise lexical order
 	// It only applies of DefaultMapType is set
 	EnforceSort bool
+
+	// Prevent float64 CBOR values from being decoded into float32 if the number cannot
+	// be stored exactly.
+	KeepFloatPrecision bool
 }
 
 // DecMode returns DecMode with immutable options and no tags (safe for concurrency).
@@ -1194,6 +1198,7 @@ func (opts DecOptions) decMode() (*decMode, error) { //nolint:gocritic // ignore
 		mapKeyTypeStrict:          opts.MapKeyTypeStrict,
 		disableKeyAsInt:           opts.DisableKeyAsInt,
 		enforceSort:               opts.EnforceSort,
+		keepFloatPrecision:        opts.KeepFloatPrecision,
 	}
 
 	return &dm, nil
@@ -1280,6 +1285,7 @@ type decMode struct {
 	mapKeyTypeStrict          bool
 	disableKeyAsInt           bool
 	enforceSort               bool
+	keepFloatPrecision        bool
 }
 
 var defaultDecMode, _ = DecOptions{}.decMode()
@@ -1327,6 +1333,7 @@ func (dm *decMode) DecOptions() DecOptions {
 		MapKeyTypeStrict:          dm.mapKeyTypeStrict,
 		DisableKeyAsInt:           dm.disableKeyAsInt,
 		EnforceSort:               dm.enforceSort,
+		KeepFloatPrecision:        dm.keepFloatPrecision,
 	}
 }
 
@@ -1651,7 +1658,16 @@ func (d *decoder) parseToValue(v reflect.Value, tInfo *typeInfo) error { //nolin
 
 		case additionalInformationAsFloat64:
 			f := math.Float64frombits(val)
-			return fillFloat(t, f, v)
+			err := fillFloat(t, f, v)
+			if !d.dm.keepFloatPrecision || err != nil {
+				return err
+			}
+			// No error and we need to maintain float precision
+			if f == float64(float32(f)) {
+				return nil
+			}
+			return &UnmarshalTypeError{CBORType: t.String(), GoType: v.Type().String(),
+				errorMsg: "float64 value would lose precision in float32 type"}
 
 		default: // ai <= 24
 			if d.dm.simpleValues.rejected[SimpleValue(val)] {
