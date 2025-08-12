@@ -939,6 +939,10 @@ type DecOptions struct {
 	RejectMapNullKey bool
 
 	DisableKeyAsInt bool
+
+	// EnforceSort rejects maps that are not sorted in bytewise lexical order
+	// It only applies of DefaultMapType is set
+	EnforceSort bool
 }
 
 // DecMode returns DecMode with immutable options and no tags (safe for concurrency).
@@ -1188,6 +1192,7 @@ func (opts DecOptions) decMode() (*decMode, error) { //nolint:gocritic // ignore
 		enforceIntPrefEnc:         opts.EnforceIntPrefEnc,
 		rejectMapNullKey:          opts.RejectMapNullKey,
 		disableKeyAsInt:           opts.DisableKeyAsInt,
+		enforceSort:               opts.EnforceSort,
 	}
 
 	return &dm, nil
@@ -1273,6 +1278,7 @@ type decMode struct {
 	enforceIntPrefEnc         bool
 	rejectMapNullKey          bool
 	disableKeyAsInt           bool
+	enforceSort               bool
 }
 
 var defaultDecMode, _ = DecOptions{}.decMode()
@@ -1319,6 +1325,7 @@ func (dm *decMode) DecOptions() DecOptions {
 		EnforceIntPrefEnc:         dm.enforceIntPrefEnc,
 		RejectMapNullKey:          dm.rejectMapNullKey,
 		DisableKeyAsInt:           dm.disableKeyAsInt,
+		EnforceSort:               dm.enforceSort,
 	}
 }
 
@@ -2552,6 +2559,10 @@ func (d *decoder) parseMapToMap(v reflect.Value, tInfo *typeInfo) error { //noli
 			}
 		}
 	}
+
+	// Enforce sort order if needed
+	var prevKey []byte // CBOR bytes including type info
+
 	for i := 0; (hasSize && i < count) || (!hasSize && !d.foundBreak()); i++ {
 		// Parse CBOR map key.
 		if !keyValue.IsValid() {
@@ -2562,6 +2573,20 @@ func (d *decoder) parseMapToMap(v reflect.Value, tInfo *typeInfo) error { //noli
 
 		if d.dm.rejectMapNullKey && d.nextCBORNil() {
 			return &InvalidMapKeyTypeError{"null (due to RejectMapNullKey)"}
+		}
+
+		if d.dm.enforceSort {
+			// Measure bounds of next data item (map key), including head
+			start := d.off
+			d.skip()
+			end := d.off
+			d.off = start // Go back
+
+			// Check sort (bytewise lexicographic)
+			if prevKey != nil && bytes.Compare(prevKey, d.data[start:end]) > 0 {
+				return &UnacceptableDataItemError{"map", "keys must be sorted"}
+			}
+			prevKey = d.data[start:end]
 		}
 
 		if lastErr = d.parseToValue(keyValue, tInfo.keyTypeInfo); lastErr != nil {
@@ -2749,8 +2774,26 @@ func (d *decoder) parseMapToStruct(v reflect.Value, tInfo *typeInfo) error { //n
 
 	errOnUnknownField := (d.dm.extraReturnErrors & ExtraDecErrorUnknownField) > 0
 
+	// Enforce sort order if needed
+	var prevKey []byte // CBOR bytes including type info
+
 MapEntryLoop:
 	for j := 0; (hasSize && j < count) || (!hasSize && !d.foundBreak()); j++ {
+
+		if d.dm.enforceSort {
+			// Measure bounds of next data item (map key), including head
+			start := d.off
+			d.skip()
+			end := d.off
+			d.off = start // Go back
+
+			// Check sort (bytewise lexicographic)
+			if prevKey != nil && bytes.Compare(prevKey, d.data[start:end]) > 0 {
+				return &UnacceptableDataItemError{"map", "keys must be sorted"}
+			}
+			prevKey = d.data[start:end]
+		}
+
 		var f *field
 
 		// If duplicate field detection is enabled and the key at index j did not match any
