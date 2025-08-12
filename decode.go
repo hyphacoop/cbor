@@ -934,6 +934,11 @@ type DecOptions struct {
 	// Enforce preferred encoding for integers (including tag numbers and item lengths) by
 	// returning an error when decoding integers encoded in wider representations than necessary.
 	EnforceIntPrefEnc bool
+
+	// Reject null map keys (only if DefaultMapType is set)
+	RejectMapNullKey bool
+
+	DisableKeyAsInt bool
 }
 
 // DecMode returns DecMode with immutable options and no tags (safe for concurrency).
@@ -1181,6 +1186,8 @@ func (opts DecOptions) decMode() (*decMode, error) { //nolint:gocritic // ignore
 		jsonUnmarshalerTranscoder: opts.JSONUnmarshalerTranscoder,
 		float64Only:               opts.Float64Only,
 		enforceIntPrefEnc:         opts.EnforceIntPrefEnc,
+		rejectMapNullKey:          opts.RejectMapNullKey,
+		disableKeyAsInt:           opts.DisableKeyAsInt,
 	}
 
 	return &dm, nil
@@ -1264,6 +1271,8 @@ type decMode struct {
 	jsonUnmarshalerTranscoder Transcoder
 	float64Only               bool
 	enforceIntPrefEnc         bool
+	rejectMapNullKey          bool
+	disableKeyAsInt           bool
 }
 
 var defaultDecMode, _ = DecOptions{}.decMode()
@@ -1308,6 +1317,8 @@ func (dm *decMode) DecOptions() DecOptions {
 		JSONUnmarshalerTranscoder: dm.jsonUnmarshalerTranscoder,
 		Float64Only:               dm.float64Only,
 		EnforceIntPrefEnc:         dm.enforceIntPrefEnc,
+		RejectMapNullKey:          dm.rejectMapNullKey,
+		DisableKeyAsInt:           dm.disableKeyAsInt,
 	}
 }
 
@@ -2548,6 +2559,11 @@ func (d *decoder) parseMapToMap(v reflect.Value, tInfo *typeInfo) error { //noli
 		} else if !reuseKey {
 			keyValue.SetZero()
 		}
+
+		if d.dm.rejectMapNullKey && d.nextCBORNil() {
+			return &InvalidMapKeyTypeError{"null (due to RejectMapNullKey)"}
+		}
+
 		if lastErr = d.parseToValue(keyValue, tInfo.keyTypeInfo); lastErr != nil {
 			if err == nil {
 				err = lastErr
@@ -2814,7 +2830,7 @@ MapEntryLoop:
 			if d.dm.dupMapKey == DupMapKeyEnforcedAPF && f == nil {
 				k = string(keyBytes)
 			}
-		} else if t <= cborTypeNegativeInt { // uint/int
+		} else if t <= cborTypeNegativeInt && !d.dm.disableKeyAsInt { // uint/int
 			var nameAsInt int64
 
 			if t == cborTypePositiveInt {
@@ -3110,7 +3126,7 @@ func (d *decoder) nextCBORType() cborType {
 }
 
 func (d *decoder) nextCBORNil() bool {
-	return d.data[d.off] == 0xf6 || d.data[d.off] == 0xf7
+	return d.data[d.off] == 0xf6
 }
 
 type jsonUnmarshaler interface{ UnmarshalJSON([]byte) error }

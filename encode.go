@@ -621,6 +621,8 @@ type EncOptions struct {
 	SimpleValues *SimpleValueRegistry
 
 	Float64Only bool
+
+	DisableKeyAsInt bool
 }
 
 // CanonicalEncOptions returns EncOptions for "Canonical CBOR" encoding,
@@ -858,6 +860,7 @@ func (opts EncOptions) encMode() (*encMode, error) { //nolint:gocritic // ignore
 		mapKeyStringOnly:          opts.MapKeyStringOnly,
 		simpleValues:              opts.SimpleValues,
 		float64Only:               opts.Float64Only,
+		disableKeyAsInt:           opts.DisableKeyAsInt,
 	}
 	return &em, nil
 }
@@ -908,6 +911,7 @@ type encMode struct {
 	mapKeyStringOnly          bool
 	simpleValues              *SimpleValueRegistry
 	float64Only               bool
+	disableKeyAsInt           bool
 }
 
 var defaultEncMode, _ = EncOptions{}.encMode()
@@ -1005,6 +1009,7 @@ func (em *encMode) EncOptions() EncOptions {
 		MapKeyStringOnly:        em.mapKeyStringOnly,
 		SimpleValues:            em.simpleValues,
 		Float64Only:             em.float64Only,
+		DisableKeyAsInt:         em.disableKeyAsInt,
 	}
 }
 
@@ -1593,6 +1598,10 @@ func encodeStruct(e *bytes.Buffer, em *encMode, v reflect.Value) (err error) {
 			if zero {
 				continue
 			}
+		}
+
+		if f.keyAsInt && em.disableKeyAsInt {
+			return &UnsupportedValueError{"keyasint is disabled"}
 		}
 
 		if !f.keyAsInt && em.fieldName == FieldNameToByteString {
