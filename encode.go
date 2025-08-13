@@ -1927,6 +1927,10 @@ func encodeMarshalerType(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 			tags:             em.tags,
 			float64Only:      em.float64Only,
 		}
+		if em.mapKeyStringOnly {
+			dm.mapKeyTypeStrict = true
+			dm.defaultMapType = reflect.TypeOf(map[string]any{})
+		}
 	} else {
 		dm = getMarshalerDecMode(em.indefLength, em.tagsMd)
 	}

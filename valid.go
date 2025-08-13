@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"reflect"
 	"strconv"
 
 	"github.com/x448/float16"
@@ -189,8 +190,14 @@ func (d *decoder) wellformedInternal(depth int, checkBuiltinTags bool) (int, err
 			count = 2
 		}
 		maxDepth := depth
-		for j := 0; j < count; j++ {
-			for i := 0; i < valInt; i++ {
+		for j := 0; j < valInt; j++ {
+			for i := 0; i < count; i++ {
+				if t == cborTypeMap && i == 0 {
+					// It's a key
+					if err := d.acceptableMapKey(); err != nil {
+						return 0, err
+					}
+				}
 				var dpt int
 				if dpt, err = d.wellformedInternal(depth, checkBuiltinTags); err != nil {
 					return 0, err
@@ -461,6 +468,24 @@ func (d *decoder) acceptableFloat(f float64) error {
 			CBORType: cborTypePrimitives.String(),
 			Message:  "floating-point infinity",
 		}
+	}
+	return nil
+}
+
+func (d *decoder) acceptableMapKey() error {
+	if !d.dm.mapKeyTypeStrict {
+		return nil
+	}
+	if d.nextCBORNil() {
+		return &InvalidMapKeyTypeError{"null"}
+	}
+	keyType := getType(d.data[d.off])
+	if keyType == cborTypeTag {
+		return &InvalidMapKeyTypeError{"tag"}
+	}
+	// XXX: special case for us
+	if d.dm.defaultMapType != nil && d.dm.defaultMapType.Key().Kind() == reflect.String && keyType != cborTypeTextString {
+		return &InvalidMapKeyTypeError{"not string"}
 	}
 	return nil
 }

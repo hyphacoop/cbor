@@ -2564,15 +2564,6 @@ func (d *decoder) parseMapToMap(v reflect.Value, tInfo *typeInfo) error { //noli
 			keyValue.SetZero()
 		}
 
-		if d.dm.mapKeyTypeStrict {
-			if d.nextCBORNil() {
-				return &InvalidMapKeyTypeError{"null (due to MapKeyTypeStrict)"}
-			}
-			if getType(d.data[d.off]) == cborTypeTag {
-				return &InvalidMapKeyTypeError{"tag (due to MapKeyTypeStrict)"}
-			}
-		}
-
 		if d.dm.enforceSort {
 			// Measure bounds of next data item (map key), including head
 			start := d.off
