@@ -1916,7 +1916,20 @@ func encodeMarshalerType(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 	}
 
 	// Verify returned CBOR data item from MarshalCBOR() is well-formed and passes tag validity for builtin tags 0-3.
-	d := decoder{data: data, dm: getMarshalerDecMode(em.indefLength, em.tagsMd)}
+	var dm *decMode
+	if em.tagsMd == TagsLimited {
+		dm = &decMode{
+			maxNestedLevels:  maxMaxNestedLevels,
+			maxArrayElements: maxMaxArrayElements,
+			maxMapPairs:      maxMaxMapPairs,
+			indefLength:      em.indefLength,
+			tagsMd:           em.tagsMd,
+			tags:             em.tags,
+		}
+	} else {
+		dm = getMarshalerDecMode(em.indefLength, em.tagsMd)
+	}
+	d := decoder{data: data, dm: dm}
 	err = d.wellformed(false, true)
 	if err != nil {
 		return &MarshalerError{typ: v.Type(), err: err}
@@ -1945,6 +1958,15 @@ func encodeTag(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 	}
 
 	t := v.Interface().(Tag)
+
+	if em.tagsMd == TagsLimited {
+		if em.tags == nil {
+			return errors.New("cbor: cannot encode cbor.Tag when TagsMd is TagsLimited and none are registered")
+		}
+		if em.tags.getTypeFromTagNum([]uint64{t.Number}) == nil {
+			return errors.New("cbor: cannot encode cbor.Tag with unregistered number when TagsMd is TagsLimited")
+		}
+	}
 
 	if t.Number == 0 && t.Content == nil {
 		// Marshal uninitialized cbor.Tag
