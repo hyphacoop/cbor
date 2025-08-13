@@ -1916,23 +1916,26 @@ func encodeMarshalerType(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 	}
 
 	// Verify returned CBOR data item from MarshalCBOR() is well-formed and passes tag validity for builtin tags 0-3.
-	var dm *decMode
-	if em.tagsMd == TagsLimited || em.float64Only {
-		dm = &decMode{
-			maxNestedLevels:  maxMaxNestedLevels,
-			maxArrayElements: maxMaxArrayElements,
-			maxMapPairs:      maxMaxMapPairs,
-			indefLength:      em.indefLength,
-			tagsMd:           em.tagsMd,
-			tags:             em.tags,
-			float64Only:      em.float64Only,
-		}
-		if em.mapKeyStringOnly {
-			dm.mapKeyTypeStrict = true
-			dm.defaultMapType = reflect.TypeOf(map[string]any{})
-		}
-	} else {
-		dm = getMarshalerDecMode(em.indefLength, em.tagsMd)
+
+	// Don't use getMarshalerDecMode anymore, I need to pass through too many options
+	dm := &decMode{
+		maxNestedLevels:  maxMaxNestedLevels,
+		maxArrayElements: maxMaxArrayElements,
+		maxMapPairs:      maxMaxMapPairs,
+		indefLength:      em.indefLength,
+		tagsMd:           em.tagsMd,
+		tags:             em.tags,
+		float64Only:      em.float64Only,
+	}
+	if em.mapKeyStringOnly {
+		dm.mapKeyTypeStrict = true
+		dm.defaultMapType = reflect.TypeOf(map[string]any{})
+	}
+	if em.nanConvert == NaNConvertReject {
+		dm.nanDec = NaNDecodeForbidden
+	}
+	if em.infConvert == InfConvertReject {
+		dm.infDec = InfDecodeForbidden
 	}
 	d := decoder{data: data, dm: dm}
 	err = d.wellformed(false, true)
