@@ -1637,22 +1637,10 @@ func (d *decoder) parseToValue(v reflect.Value, tInfo *typeInfo) error { //nolin
 		_, ai, val := d.getHead()
 		switch ai {
 		case additionalInformationAsFloat16:
-			if d.dm.float64Only {
-				return &UnacceptableDataItemError{
-					CBORType: t.String(),
-					Message:  "float smaller than 64 bits",
-				}
-			}
 			f := float64(float16.Frombits(uint16(val)).Float32())
 			return fillFloat(t, f, v)
 
 		case additionalInformationAsFloat32:
-			if d.dm.float64Only {
-				return &UnacceptableDataItemError{
-					CBORType: t.String(),
-					Message:  "float smaller than 64 bits",
-				}
-			}
 			f := float64(math.Float32frombits(uint32(val)))
 			return fillFloat(t, f, v)
 
@@ -2240,22 +2228,10 @@ func (d *decoder) parse(skipSelfDescribedTag bool) (any, error) { //nolint:gocyc
 			return nil, nil
 
 		case additionalInformationAsFloat16:
-			if d.dm.float64Only {
-				return nil, &UnacceptableDataItemError{
-					CBORType: t.String(),
-					Message:  "float smaller than 64 bits",
-				}
-			}
 			f := float64(float16.Frombits(uint16(val)).Float32())
 			return f, nil
 
 		case additionalInformationAsFloat32:
-			if d.dm.float64Only {
-				return nil, &UnacceptableDataItemError{
-					CBORType: t.String(),
-					Message:  "float smaller than 64 bits",
-				}
-			}
 			f := float64(math.Float32frombits(uint32(val)))
 			return f, nil
 

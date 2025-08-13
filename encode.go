@@ -1917,7 +1917,7 @@ func encodeMarshalerType(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 
 	// Verify returned CBOR data item from MarshalCBOR() is well-formed and passes tag validity for builtin tags 0-3.
 	var dm *decMode
-	if em.tagsMd == TagsLimited {
+	if em.tagsMd == TagsLimited || em.float64Only {
 		dm = &decMode{
 			maxNestedLevels:  maxMaxNestedLevels,
 			maxArrayElements: maxMaxArrayElements,
@@ -1925,6 +1925,7 @@ func encodeMarshalerType(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 			indefLength:      em.indefLength,
 			tagsMd:           em.tagsMd,
 			tags:             em.tags,
+			float64Only:      em.float64Only,
 		}
 	} else {
 		dm = getMarshalerDecMode(em.indefLength, em.tagsMd)

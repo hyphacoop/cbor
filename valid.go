@@ -386,6 +386,12 @@ func (d *decoder) wellformedHead() (t cborType, ai byte, val uint64, err error) 
 		val = uint64(binary.BigEndian.Uint16(d.data[d.off : d.off+argumentSize]))
 		d.off += argumentSize
 		if t == cborTypePrimitives {
+			if d.dm.float64Only {
+				return 0, 0, 0, &UnacceptableDataItemError{
+					CBORType: t.String(),
+					Message:  "float smaller than 64 bits",
+				}
+			}
 			if err := d.acceptableFloat(float64(float16.Frombits(uint16(val)).Float32())); err != nil {
 				return 0, 0, 0, err
 			}
@@ -401,6 +407,12 @@ func (d *decoder) wellformedHead() (t cborType, ai byte, val uint64, err error) 
 		val = uint64(binary.BigEndian.Uint32(d.data[d.off : d.off+argumentSize]))
 		d.off += argumentSize
 		if t == cborTypePrimitives {
+			if d.dm.float64Only {
+				return 0, 0, 0, &UnacceptableDataItemError{
+					CBORType: t.String(),
+					Message:  "float smaller than 64 bits",
+				}
+			}
 			if err := d.acceptableFloat(float64(math.Float32frombits(uint32(val)))); err != nil {
 				return 0, 0, 0, err
 			}
