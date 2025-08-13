@@ -476,6 +476,10 @@ func (d *decoder) acceptableMapKey() error {
 	if !d.dm.mapKeyTypeStrict {
 		return nil
 	}
+	if len(d.data) <= d.off {
+		// No more data, other functions will find and flag this
+		return nil
+	}
 	if d.nextCBORNil() {
 		return &InvalidMapKeyTypeError{"null"}
 	}
