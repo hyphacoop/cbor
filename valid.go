@@ -4,6 +4,7 @@
 package cbor
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -185,6 +186,9 @@ func (d *decoder) wellformedInternal(depth int, checkBuiltinTags bool) (int, err
 			}
 		}
 
+		// Enforce sort order if needed
+		var prevKey []byte // CBOR bytes including type info
+
 		count := 1
 		if t == cborTypeMap {
 			count = 2
@@ -196,6 +200,19 @@ func (d *decoder) wellformedInternal(depth int, checkBuiltinTags bool) (int, err
 					// It's a key
 					if err := d.acceptableMapKey(); err != nil {
 						return 0, err
+					}
+					if d.dm.enforceSort {
+						// Measure bounds of next data item (map key), including head
+						start := d.off
+						d.skip()
+						end := d.off
+						d.off = start // Go back
+
+						// Check sort (bytewise lexicographic)
+						if prevKey != nil && bytes.Compare(prevKey, d.data[start:end]) > 0 {
+							return 0, &UnacceptableDataItemError{"map", "keys must be sorted"}
+						}
+						prevKey = d.data[start:end]
 					}
 				}
 				var dpt int
@@ -485,8 +502,8 @@ func (d *decoder) acceptableMapKey() error {
 		return nil
 	}
 	if len(d.data) <= d.off {
-		// No more data, other functions will find and flag this
-		return nil
+		// No more data
+		return io.ErrUnexpectedEOF
 	}
 	if d.nextCBORNil() {
 		return &InvalidMapKeyTypeError{"null"}
