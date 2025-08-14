@@ -1919,13 +1919,18 @@ func encodeMarshalerType(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 
 	// Don't use getMarshalerDecMode anymore, I need to pass through too many options
 	dm := &decMode{
-		maxNestedLevels:  maxMaxNestedLevels,
-		maxArrayElements: maxMaxArrayElements,
-		maxMapPairs:      maxMaxMapPairs,
-		indefLength:      em.indefLength,
-		tagsMd:           em.tagsMd,
-		tags:             em.tags,
-		float64Only:      em.float64Only,
+		maxNestedLevels:   maxMaxNestedLevels,
+		maxArrayElements:  maxMaxArrayElements,
+		maxMapPairs:       maxMaxMapPairs,
+		indefLength:       em.indefLength,
+		tagsMd:            em.tagsMd,
+		tags:              em.tags,
+		float64Only:       em.float64Only,
+		simpleValues:      em.simpleValues,
+		enforceIntPrefEnc: true, // XXX: special for us
+		mapKeyTypeStrict:  em.mapKeyStringOnly,
+		defaultMapType:    reflect.TypeOf(map[string]any{}), // XXX: special for us
+		enforceSort:       em.sort == SortBytewiseLexical,
 	}
 	if em.mapKeyStringOnly {
 		dm.mapKeyTypeStrict = true

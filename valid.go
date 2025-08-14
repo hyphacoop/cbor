@@ -274,6 +274,14 @@ func (d *decoder) wellformedInternal(depth int, checkBuiltinTags bool) (int, err
 
 		// Check tag content.
 		return d.wellformedInternal(depth, checkBuiltinTags)
+
+	case cborTypePrimitives:
+		if d.dm.simpleValues != nil && ai <= 24 && d.dm.simpleValues.rejected[val] {
+			return 0, &UnacceptableDataItemError{
+				cborTypePrimitives.String(),
+				"simple value " + strconv.FormatInt(int64(val), 10) + " is not recognized",
+			}
+		}
 	}
 
 	return depth, nil
