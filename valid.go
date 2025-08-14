@@ -201,26 +201,26 @@ func (d *decoder) wellformedInternal(depth int, checkBuiltinTags bool) (int, err
 					if err := d.acceptableMapKey(); err != nil {
 						return 0, err
 					}
-					if d.dm.enforceSort {
-						// Measure bounds of next data item (map key), including head
-						start := d.off
-						d.skip()
-						end := d.off
-						d.off = start // Go back
 
-						// Check sort (bytewise lexicographic)
-						if prevKey != nil && bytes.Compare(prevKey, d.data[start:end]) > 0 {
-							return 0, &UnacceptableDataItemError{"map", "keys must be sorted"}
-						}
-						prevKey = d.data[start:end]
-					}
 				}
+				start := d.off
+
 				var dpt int
 				if dpt, err = d.wellformedInternal(depth, checkBuiltinTags); err != nil {
 					return 0, err
 				}
 				if dpt > maxDepth {
 					maxDepth = dpt // Save max depth
+				}
+
+				if t == cborTypeMap && i == 0 && d.dm.enforceSort {
+					// Measure bounds of next data item (map key), including head
+					end := d.off
+					// Check sort (bytewise lexicographic)
+					if prevKey != nil && bytes.Compare(prevKey, d.data[start:end]) > 0 {
+						return 0, &UnacceptableDataItemError{"map", "keys must be sorted"}
+					}
+					prevKey = d.data[start:end]
 				}
 			}
 		}
