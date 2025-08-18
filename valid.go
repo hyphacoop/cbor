@@ -463,6 +463,11 @@ func (d *decoder) wellformedHead() (t cborType, ai byte, val uint64, err error) 
 			if err := d.acceptableFloat(math.Float64frombits(val)); err != nil {
 				return 0, 0, 0, err
 			}
+		} else if t == cborTypePositiveInt || t == cborTypeNegativeInt {
+			if d.dm.int64RangeOnly && val > math.MaxInt64 {
+				// This catches positive int that's too large or negative int that's too small
+				return 0, 0, 0, &UnacceptableDataItemError{"integer", "outside int64 range"}
+			}
 		}
 		return t, ai, val, nil
 	}

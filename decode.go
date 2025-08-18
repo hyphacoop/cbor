@@ -948,6 +948,8 @@ type DecOptions struct {
 	// Prevent float64 CBOR values from being decoded into float32 if the number cannot
 	// be stored exactly.
 	KeepFloatPrecision bool
+
+	Int64RangeOnly bool
 }
 
 // DecMode returns DecMode with immutable options and no tags (safe for concurrency).
@@ -1199,6 +1201,7 @@ func (opts DecOptions) decMode() (*decMode, error) { //nolint:gocritic // ignore
 		disableKeyAsInt:           opts.DisableKeyAsInt,
 		enforceSort:               opts.EnforceSort,
 		keepFloatPrecision:        opts.KeepFloatPrecision,
+		int64RangeOnly:            opts.Int64RangeOnly,
 	}
 
 	return &dm, nil
@@ -1286,6 +1289,7 @@ type decMode struct {
 	disableKeyAsInt           bool
 	enforceSort               bool
 	keepFloatPrecision        bool
+	int64RangeOnly            bool
 }
 
 var defaultDecMode, _ = DecOptions{}.decMode()
@@ -1334,6 +1338,7 @@ func (dm *decMode) DecOptions() DecOptions {
 		DisableKeyAsInt:           dm.disableKeyAsInt,
 		EnforceSort:               dm.enforceSort,
 		KeepFloatPrecision:        dm.keepFloatPrecision,
+		Int64RangeOnly:            dm.int64RangeOnly,
 	}
 }
 

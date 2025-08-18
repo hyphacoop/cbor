@@ -626,6 +626,8 @@ type EncOptions struct {
 	Float64Only bool
 
 	DisableKeyAsInt bool
+
+	Int64RangeOnly bool
 }
 
 // CanonicalEncOptions returns EncOptions for "Canonical CBOR" encoding,
@@ -864,6 +866,7 @@ func (opts EncOptions) encMode() (*encMode, error) { //nolint:gocritic // ignore
 		simpleValues:              opts.SimpleValues,
 		float64Only:               opts.Float64Only,
 		disableKeyAsInt:           opts.DisableKeyAsInt,
+		int64RangeOnly:            opts.Int64RangeOnly,
 	}
 	return &em, nil
 }
@@ -915,6 +918,7 @@ type encMode struct {
 	simpleValues              *SimpleValueRegistry
 	float64Only               bool
 	disableKeyAsInt           bool
+	int64RangeOnly            bool
 }
 
 var defaultEncMode, _ = EncOptions{}.encMode()
@@ -1013,6 +1017,7 @@ func (em *encMode) EncOptions() EncOptions {
 		SimpleValues:            em.simpleValues,
 		Float64Only:             em.float64Only,
 		DisableKeyAsInt:         em.disableKeyAsInt,
+		Int64RangeOnly:          em.int64RangeOnly,
 	}
 }
 
@@ -1130,6 +1135,10 @@ func encodeInt(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 func encodeUint(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 	if b := em.encTagBytes(v.Type()); b != nil {
 		e.Write(b)
+	}
+	i := v.Uint()
+	if em.int64RangeOnly && i > math.MaxInt64 {
+		return &UnsupportedValueError{fmt.Sprintf("uint greater than int64 max: %d", i)}
 	}
 	encodeHead(e, byte(cborTypePositiveInt), v.Uint())
 	return nil
@@ -1724,7 +1733,7 @@ func encodeBigInt(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 	}
 
 	if em.bigIntConvert == BigIntConvertShortest || em.bigIntConvert == BigIntConvertOnly {
-		if bi.IsUint64() {
+		if bi.IsUint64() && (!em.int64RangeOnly || bi.Uint64() <= math.MaxInt64) {
 			if sign >= 0 {
 				// Encode as CBOR pos int (major type 0)
 				encodeHead(e, byte(cborTypePositiveInt), bi.Uint64())
@@ -1931,6 +1940,7 @@ func encodeMarshalerType(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 		mapKeyTypeStrict:  em.mapKeyStringOnly,
 		defaultMapType:    reflect.TypeOf(map[string]any{}), // XXX: special for us
 		enforceSort:       em.sort == SortBytewiseLexical,
+		int64RangeOnly:    em.int64RangeOnly,
 	}
 	if em.mapKeyStringOnly {
 		dm.mapKeyTypeStrict = true
