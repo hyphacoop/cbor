@@ -640,6 +640,19 @@ func NewSimpleValueRegistryStrict() *SimpleValueRegistry {
 	return &r
 }
 
+// Creates a SimpleValueRegistry that only accepts true, false, null, and undefined.
+// Undefined is turned into Go's nil.
+func NewSimpleValueRegistryStrictUndefined() *SimpleValueRegistry {
+	var r SimpleValueRegistry
+	for i := 0; i < 20; i++ {
+		r.rejected[i] = true
+	}
+	for i := 32; i < 256; i++ {
+		r.rejected[i] = true
+	}
+	return &r
+}
+
 // NaNMode specifies how to decode floating-point values (major type 7, additional information 25
 // through 27) representing NaN (not-a-number).
 type NaNMode int
