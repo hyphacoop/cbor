@@ -1,4 +1,4 @@
-module github.com/fxamacker/cbor/v2
+module github.com/hyphacoop/cbor/v2
 
 go 1.20
 

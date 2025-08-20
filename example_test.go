@@ -11,7 +11,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/fxamacker/cbor/v2" // remove "/v2" suffix if you're not using Go modules (see README.md)
+	"github.com/hyphacoop/cbor/v2" // remove "/v2" suffix if you're not using Go modules (see README.md)
 )
 
 func ExampleMarshal() {

@@ -29,7 +29,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/hyphacoop/cbor/v2"
 )
 
 // cborTagNumForEmbeddedJSON is the CBOR tag number 262.

@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/hyphacoop/cbor/v2"
 )
 
 // TestStdlibJSONCompatibility tests compatibility as a drop-in replacement for the standard library

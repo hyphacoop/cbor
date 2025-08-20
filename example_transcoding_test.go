@@ -9,7 +9,7 @@ import (
 	"io"
 	"reflect"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/hyphacoop/cbor/v2"
 )
 
 type TranscoderFunc func(io.Writer, io.Reader) error
