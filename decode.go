@@ -1669,7 +1669,7 @@ func (d *decoder) parseToValue(v reflect.Value, tInfo *typeInfo) error { //nolin
 				return err
 			}
 			// No error and we need to maintain float precision
-			if f == float64(float32(f)) {
+			if v.Kind() == reflect.Float64 || f == float64(float32(f)) {
 				return nil
 			}
 			return &UnmarshalTypeError{CBORType: t.String(), GoType: v.Type().String(),
