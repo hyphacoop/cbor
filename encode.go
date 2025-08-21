@@ -1140,7 +1140,7 @@ func encodeUint(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 	if em.int64RangeOnly && i > math.MaxInt64 {
 		return &UnsupportedValueError{fmt.Sprintf("uint greater than int64 max: %d", i)}
 	}
-	encodeHead(e, byte(cborTypePositiveInt), v.Uint())
+	encodeHead(e, byte(cborTypePositiveInt), i)
 	return nil
 }
 
