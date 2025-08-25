@@ -628,6 +628,8 @@ type EncOptions struct {
 	DisableKeyAsInt bool
 
 	Int64RangeOnly bool
+
+	NoFloats bool
 }
 
 // CanonicalEncOptions returns EncOptions for "Canonical CBOR" encoding,
@@ -867,6 +869,7 @@ func (opts EncOptions) encMode() (*encMode, error) { //nolint:gocritic // ignore
 		float64Only:               opts.Float64Only,
 		disableKeyAsInt:           opts.DisableKeyAsInt,
 		int64RangeOnly:            opts.Int64RangeOnly,
+		noFloats:                  opts.NoFloats,
 	}
 	return &em, nil
 }
@@ -919,6 +922,7 @@ type encMode struct {
 	float64Only               bool
 	disableKeyAsInt           bool
 	int64RangeOnly            bool
+	noFloats                  bool
 }
 
 var defaultEncMode, _ = EncOptions{}.encMode()
@@ -1018,6 +1022,7 @@ func (em *encMode) EncOptions() EncOptions {
 		Float64Only:             em.float64Only,
 		DisableKeyAsInt:         em.disableKeyAsInt,
 		Int64RangeOnly:          em.int64RangeOnly,
+		NoFloats:                em.noFloats,
 	}
 }
 
@@ -1145,6 +1150,9 @@ func encodeUint(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 }
 
 func encodeFloat(e *bytes.Buffer, em *encMode, v reflect.Value) error {
+	if em.noFloats {
+		return &UnsupportedTypeError{Type: v.Type()}
+	}
 	if b := em.encTagBytes(v.Type()); b != nil {
 		e.Write(b)
 	}
@@ -1941,6 +1949,7 @@ func encodeMarshalerType(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 		defaultMapType:    reflect.TypeOf(map[string]any{}), // XXX: special for us
 		enforceSort:       em.sort == SortBytewiseLexical,
 		int64RangeOnly:    em.int64RangeOnly,
+		noFloats:          em.noFloats,
 	}
 	if em.mapKeyStringOnly {
 		dm.mapKeyTypeStrict = true

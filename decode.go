@@ -963,6 +963,8 @@ type DecOptions struct {
 	KeepFloatPrecision bool
 
 	Int64RangeOnly bool
+
+	NoFloats bool
 }
 
 // DecMode returns DecMode with immutable options and no tags (safe for concurrency).
@@ -1215,6 +1217,7 @@ func (opts DecOptions) decMode() (*decMode, error) { //nolint:gocritic // ignore
 		enforceSort:               opts.EnforceSort,
 		keepFloatPrecision:        opts.KeepFloatPrecision,
 		int64RangeOnly:            opts.Int64RangeOnly,
+		noFloats:                  opts.NoFloats,
 	}
 
 	return &dm, nil
@@ -1303,6 +1306,7 @@ type decMode struct {
 	enforceSort               bool
 	keepFloatPrecision        bool
 	int64RangeOnly            bool
+	noFloats                  bool
 }
 
 var defaultDecMode, _ = DecOptions{}.decMode()
@@ -1352,6 +1356,7 @@ func (dm *decMode) DecOptions() DecOptions {
 		EnforceSort:               dm.enforceSort,
 		KeepFloatPrecision:        dm.keepFloatPrecision,
 		Int64RangeOnly:            dm.int64RangeOnly,
+		NoFloats:                  dm.noFloats,
 	}
 }
 

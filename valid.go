@@ -487,6 +487,12 @@ func (d *decoder) wellformedHead() (t cborType, ai byte, val uint64, err error) 
 }
 
 func (d *decoder) acceptableFloat(f float64) error {
+	if d.dm.noFloats {
+		return &UnacceptableDataItemError{
+			CBORType: cborTypePrimitives.String(),
+			Message:  "float",
+		}
+	}
 	switch {
 	case d.dm.nanDec == NaNDecodeForbidden && math.IsNaN(f):
 		return &UnacceptableDataItemError{
