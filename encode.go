@@ -896,6 +896,7 @@ type UserBufferEncMode interface {
 }
 
 type encMode struct {
+	marshalerDecMode          *decMode
 	tags                      tagProvider
 	sort                      SortMode
 	shortestFloat             ShortestFloatMode
@@ -1938,33 +1939,39 @@ func encodeMarshalerType(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 	// Verify returned CBOR data item from MarshalCBOR() is well-formed and passes tag validity for builtin tags 0-3.
 
 	// Don't use getMarshalerDecMode anymore, I need to pass through too many options
-	dm := &decMode{
-		maxNestedLevels:   maxMaxNestedLevels,
-		maxArrayElements:  maxMaxArrayElements,
-		maxMapPairs:       maxMaxMapPairs,
-		indefLength:       em.indefLength,
-		tagsMd:            em.tagsMd,
-		tags:              em.tags,
-		float64Only:       em.float64Only,
-		simpleValues:      em.simpleValues,
-		enforceIntPrefEnc: true, // XXX: special for us
-		mapKeyTypeStrict:  em.mapKeyStringOnly,
-		defaultMapType:    reflect.TypeOf(map[string]any{}), // XXX: special for us
-		enforceSort:       em.sort == SortBytewiseLexical,
-		int64RangeOnly:    em.int64RangeOnly,
-		noFloats:          em.noFloats,
+	if em.marshalerDecMode == nil {
+		dm := &decMode{
+			maxNestedLevels:   maxMaxNestedLevels,
+			maxArrayElements:  maxMaxArrayElements,
+			maxMapPairs:       maxMaxMapPairs,
+			indefLength:       em.indefLength,
+			tagsMd:            em.tagsMd,
+			tags:              em.tags,
+			float64Only:       em.float64Only,
+			simpleValues:      em.simpleValues,
+			enforceIntPrefEnc: true, // XXX: special for us
+			mapKeyTypeStrict:  em.mapKeyStringOnly,
+			defaultMapType:    reflect.TypeOf(map[string]any{}), // XXX: special for us
+			enforceSort:       em.sort == SortBytewiseLexical,
+			int64RangeOnly:    em.int64RangeOnly,
+			noFloats:          em.noFloats,
+		}
+		if em.mapKeyStringOnly {
+			dm.mapKeyTypeStrict = true
+			dm.defaultMapType = reflect.TypeOf(map[string]any{})
+		}
+		if em.nanConvert == NaNConvertReject {
+			dm.nanDec = NaNDecodeForbidden
+		}
+		if em.infConvert == InfConvertReject {
+			dm.infDec = InfDecodeForbidden
+		}
+
+		// Cache this
+		em.marshalerDecMode = dm
 	}
-	if em.mapKeyStringOnly {
-		dm.mapKeyTypeStrict = true
-		dm.defaultMapType = reflect.TypeOf(map[string]any{})
-	}
-	if em.nanConvert == NaNConvertReject {
-		dm.nanDec = NaNDecodeForbidden
-	}
-	if em.infConvert == InfConvertReject {
-		dm.infDec = InfDecodeForbidden
-	}
-	d := decoder{data: data, dm: dm}
+
+	d := decoder{data: data, dm: em.marshalerDecMode}
 	err = d.wellformed(false, true)
 	if err != nil {
 		return &MarshalerError{typ: v.Type(), err: err}
