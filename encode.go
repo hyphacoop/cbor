@@ -1400,6 +1400,9 @@ type mapEncodeFunc struct {
 }
 
 func (me mapEncodeFunc) encode(e *bytes.Buffer, em *encMode, v reflect.Value) error {
+	if em.mapKeyStringOnly && v.Type().Key().Kind() != reflect.String {
+		return &UnsupportedTypeError{v.Type()}
+	}
 	if v.IsNil() && em.nilContainers == NilContainerAsNull {
 		e.Write(cborNil)
 		return nil
