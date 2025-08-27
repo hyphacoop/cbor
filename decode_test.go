@@ -5511,6 +5511,7 @@ func TestDecOptions(t *testing.T) {
 		BinaryUnmarshaler:         BinaryUnmarshalerNone,
 		TextUnmarshaler:           TextUnmarshalerTextString,
 		JSONUnmarshalerTranscoder: stubTranscoder{},
+		FloatPrecision:            FloatPrecisionKept,
 	}
 	ov := reflect.ValueOf(opts1)
 	for i := 0; i < ov.NumField(); i++ {
@@ -10907,6 +10908,86 @@ func TestJSONUnmarshalerTranscoder(t *testing.T) {
 				}
 			}
 
+		})
+	}
+}
+
+func TestFloatPrecisionMode(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		opts      DecOptions
+		in        []byte
+		intoType  reflect.Type
+		want      any
+		shouldErr bool
+	}{
+		{
+			name:     "FloatPrecision is not called by default",
+			opts:     DecOptions{},
+			in:       mustHexDecode("fbc010666666666666"),
+			intoType: reflect.TypeFor[float32](),
+			want:     float32(-4.1),
+		},
+		{
+			name:     "FloatPrecisionKept float64 precise",
+			opts:     DecOptions{FloatPrecision: FloatPrecisionKept},
+			in:       mustHexDecode("fbc010666666666666"),
+			intoType: reflect.TypeFor[any](),
+			want:     float64(-4.1),
+		},
+		{
+			name:     "FloatPrecisionKept float32 precise",
+			opts:     DecOptions{FloatPrecision: FloatPrecisionKept},
+			in:       mustHexDecode("fb3ff8000000000000"),
+			intoType: reflect.TypeFor[float32](),
+			want:     float32(1.5),
+		},
+		{
+			name:     "FloatPrecisionKept float32 precise 2",
+			opts:     DecOptions{FloatPrecision: FloatPrecisionKept},
+			in:       mustHexDecode("fb3ff8000000000000"),
+			intoType: reflect.TypeFor[float64](),
+			want:     float64(1.5),
+		},
+		{
+			name:     "FloatPrecisionIgnored float64 precise",
+			opts:     DecOptions{FloatPrecision: FloatPrecisionIgnored},
+			in:       mustHexDecode("fbc010666666666666"),
+			intoType: reflect.TypeFor[any](),
+			want:     float64(-4.1),
+		},
+		{
+			name:      "FloatPrecisionKept float32 err",
+			opts:      DecOptions{FloatPrecision: FloatPrecisionKept},
+			in:        mustHexDecode("fbc010666666666666"),
+			intoType:  reflect.TypeFor[float32](),
+			shouldErr: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dm, err := tc.opts.DecMode()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			gotrv := reflect.New(tc.intoType)
+			err = dm.Unmarshal(tc.in, gotrv.Interface())
+			if tc.shouldErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				// It should err and it did, done here
+				return
+			} else {
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			got := gotrv.Elem().Interface()
+			if !reflect.DeepEqual(tc.want, got) {
+				t.Errorf("want: %v (%T), got: %v (%T)", tc.want, tc.want, got, got)
+			}
 		})
 	}
 }
