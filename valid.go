@@ -9,7 +9,6 @@ import (
 	"errors"
 	"io"
 	"math"
-	"reflect"
 	"strconv"
 
 	"github.com/x448/float16"
@@ -524,7 +523,7 @@ func (d *decoder) acceptableMapKey() error {
 		return &InvalidMapKeyTypeError{"tag"}
 	}
 	// XXX: special case for us
-	if d.dm.defaultMapType != nil && d.dm.defaultMapType.Key().Kind() == reflect.String && keyType != cborTypeTextString {
+	if d.dm.defaultMapType != nil && keyType != cborTypeTextString {
 		return &InvalidMapKeyTypeError{"not string"}
 	}
 	return nil
