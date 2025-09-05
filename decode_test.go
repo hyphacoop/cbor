@@ -3792,6 +3792,24 @@ func TestUnmarshalStructError1(t *testing.T) {
 	}
 }
 
+func TestUnmarshal_unknownFields(t *testing.T) {
+	type Animal struct {
+		Age     int
+		Name    string
+		Owners  []string
+		Unknown map[string]bool `cbor:"-,unknown"`
+	}
+	data, _ := hex.DecodeString("a46341676504644e616d656543616e6479664f776e65727382644d617279634a6f65644d616c65f4")
+	var animal Animal
+	err := Unmarshal(data, &animal)
+	if err != nil {
+		fmt.Println("error:", err)
+	}
+	if _, ok := animal.Unknown["Male"]; !ok {
+		t.Fatalf("Struct %+v did not deserialize correctly.", animal)
+	}
+}
+
 func TestUnmarshalStructError2(t *testing.T) {
 	// Unmarshal integer and invalid UTF8 string as field name into struct
 	type strc struct {
