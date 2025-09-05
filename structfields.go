@@ -24,6 +24,7 @@ type field struct {
 	omitEmpty          bool      // used to skip empty field
 	omitZero           bool      // used to skip zero field
 	keyAsInt           bool      // used to encode/decode field name as int
+	unknown            bool      // used if the decoder should place unknown fields into this map
 }
 
 type fields []*field
@@ -181,7 +182,7 @@ func appendFields(
 
 		// Parse field tag options
 		var tagFieldName string
-		var omitempty, omitzero, keyasint bool
+		var omitempty, omitzero, keyasint, unknown bool
 		for j := 0; tag != ""; j++ {
 			var token string
 			idx := strings.IndexByte(tag, ',')
@@ -202,6 +203,8 @@ func appendFields(
 					}
 				case "keyasint":
 					keyasint = true
+				case "unknown":
+					unknown = true
 				}
 			}
 		}
@@ -223,7 +226,9 @@ func appendFields(
 				omitEmpty: omitempty,
 				omitZero:  omitzero,
 				keyAsInt:  keyasint,
-				tagged:    tagged})
+				tagged:    tagged,
+				unknown:   unknown,
+			})
 		} else {
 			if nTypes == nil {
 				nTypes = make(map[reflect.Type][][]int)

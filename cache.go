@@ -123,6 +123,7 @@ func getDecodingStructType(t reflect.Type) *decodingStructType {
 	toArray := hasToArrayOption(structOptions)
 
 	var errs []error
+	unkownField := ""
 	for i := 0; i < len(flds); i++ {
 		if flds[i].keyAsInt {
 			nameAsInt, numErr := strconv.Atoi(flds[i].name)
@@ -131,6 +132,16 @@ func getDecodingStructType(t reflect.Type) *decodingStructType {
 				break
 			}
 			flds[i].nameAsInt = int64(nameAsInt)
+		}
+		if flds[i].unknown {
+			if unkownField != "" {
+				errs = append(errs, fmt.Errorf("cbor: two or more fields of %v are marked unknown: %q and %q", t, unkownField, flds[i].name))
+				break
+			} else if flds[i].typ.Kind() != reflect.Map {
+				errs = append(errs, fmt.Errorf("cbor: field %q of %v must be a map[string]any to be marked unknown", flds[i].name, t))
+				break
+			}
+			unkownField = flds[i].name
 		}
 
 		flds[i].typInfo = getTypeInfo(flds[i].typ)
