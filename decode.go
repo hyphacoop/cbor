@@ -2763,6 +2763,31 @@ func (d *decoder) parseMapToStruct(v reflect.Value, tInfo *typeInfo) error { //n
 		}
 	}
 
+	var unknownField *field
+	var unknownFieldValue reflect.Value
+	var unknownFieldTypeInfo *typeInfo
+	for i := range structType.fields {
+		if structType.fields[i].unknown {
+			unknownField = structType.fields[i]
+			var err error
+			unknownFieldValue, err = getFieldValue(v, unknownField.idx, func(v reflect.Value) (reflect.Value, error) {
+				if !v.CanSet() {
+					return reflect.Value{}, errors.New("cbor: cannot set embedded pointer to unexported struct: " + v.Type().String())
+				}
+				v.Set(reflect.New(v.Type().Elem()))
+				return v, nil
+			})
+			if err != nil {
+				return err
+			}
+			if unknownFieldValue.IsNil() {
+				unknownFieldValue.Set(reflect.MakeMap(unknownFieldValue.Type()))
+			}
+			unknownFieldTypeInfo = getTypeInfo(unknownField.typ)
+			break
+		}
+	}
+
 	// Keeps track of CBOR map keys to detect duplicate map key
 	keyCount := 0
 	var mapKeys map[any]struct{}
@@ -2847,7 +2872,7 @@ MapEntryLoop:
 				}
 			}
 
-			if d.dm.dupMapKey == DupMapKeyEnforcedAPF && f == nil {
+			if (d.dm.dupMapKey == DupMapKeyEnforcedAPF || unknownField != nil) && f == nil {
 				k = string(keyBytes)
 			}
 		} else if t <= cborTypeNegativeInt && !d.dm.disableKeyAsInt { // uint/int
@@ -2898,7 +2923,7 @@ MapEntryLoop:
 				}
 			}
 
-			if d.dm.dupMapKey == DupMapKeyEnforcedAPF && f == nil {
+			if (d.dm.dupMapKey == DupMapKeyEnforcedAPF || unknownField != nil) && f == nil {
 				k = nameAsInt
 			}
 		} else {
@@ -2909,7 +2934,7 @@ MapEntryLoop:
 					errorMsg: "map key is of type " + t.String() + " and cannot be used to match struct field name",
 				}
 			}
-			if d.dm.dupMapKey == DupMapKeyEnforcedAPF {
+			if d.dm.dupMapKey == DupMapKeyEnforcedAPF || unknownField != nil {
 				// parse key
 				k, lastErr = d.parse(true)
 				if lastErr != nil {
@@ -2927,6 +2952,18 @@ MapEntryLoop:
 		}
 
 		if f == nil {
+			if unknownField != nil {
+				// valueForUK, parseErr := d.parse(true)
+				mapKey := reflect.ValueOf(k)
+				fv := reflect.New(unknownFieldTypeInfo.elemTypeInfo.typ).Elem()
+				if lastErr = d.parseToValue(fv, unknownFieldTypeInfo.elemTypeInfo); lastErr != nil {
+					err = lastErr
+					continue
+				}
+				unknownFieldValue.SetMapIndex(mapKey, fv)
+				continue
+			}
+
 			if errOnUnknownField {
 				err = &UnknownFieldError{j}
 				d.skip() // Skip value
