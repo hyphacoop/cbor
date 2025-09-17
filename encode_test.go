@@ -5639,6 +5639,12 @@ func TestEncOptions(t *testing.T) {
 		BinaryMarshaler:         BinaryMarshalerNone,
 		TextMarshaler:           TextMarshalerTextString,
 		JSONMarshalerTranscoder: stubTranscoder{},
+		MapKeyStringOnly:        true,
+		SimpleValues:            NewSimpleValueRegistryStrict(),
+		Float64Only:             true,
+		DisableKeyAsInt:         true,
+		Int64RangeOnly:          true,
+		NoFloats:                true,
 	}
 	ov := reflect.ValueOf(opts1)
 	for i := 0; i < ov.NumField(); i++ {
@@ -5843,7 +5849,7 @@ func TestEncTagsMdOption(t *testing.T) {
 	}
 
 	// Encoding RawTag and TagsForbidden option returns error
-	wantErrorMsg = "cbor: cannot encode cbor.RawTag when TagsMd is TagsForbidden"
+	wantErrorMsg = "cbor: cannot encode cbor.RawTag when TagsMd is TagsForbidden or TagsLimited"
 	rawTag := RawTag{123, []byte{01}}
 	if _, err := em.Marshal(&rawTag); err == nil {
 		t.Errorf("Marshal() didn't return an error")

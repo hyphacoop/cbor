@@ -3146,7 +3146,8 @@ func (d *decoder) nextCBORType() cborType {
 }
 
 func (d *decoder) nextCBORNil() bool {
-	return d.data[d.off] == 0xf6
+	// Check for null, and if allowed, undefined
+	return d.data[d.off] == 0xf6 || (!d.dm.simpleValues.rejected[23] && d.data[d.off] == 0xf7)
 }
 
 type jsonUnmarshaler interface{ UnmarshalJSON([]byte) error }

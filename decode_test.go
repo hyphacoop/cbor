@@ -5511,6 +5511,14 @@ func TestDecOptions(t *testing.T) {
 		BinaryUnmarshaler:         BinaryUnmarshalerNone,
 		TextUnmarshaler:           TextUnmarshalerTextString,
 		JSONUnmarshalerTranscoder: stubTranscoder{},
+		Float64Only:               true,
+		EnforceIntPrefEnc:         true,
+		MapKeyTypeStrict:          true,
+		DisableKeyAsInt:           true,
+		EnforceSort:               true,
+		KeepFloatPrecision:        true,
+		Int64RangeOnly:            true,
+		NoFloats:                  true,
 	}
 	ov := reflect.ValueOf(opts1)
 	for i := 0; i < ov.NumField(); i++ {
