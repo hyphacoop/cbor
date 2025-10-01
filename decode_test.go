@@ -3797,7 +3797,7 @@ func TestUnmarshal_unknownFields(t *testing.T) {
 		Age     int
 		Name    string
 		Owners  []string
-		Unknown map[string]bool `cbor:"-,unknown"`
+		Unknown map[string]bool `cbor:",unknown"`
 	}
 	data, _ := hex.DecodeString("a46341676504644e616d656543616e6479664f776e65727382644d617279634a6f65644d616c65f4")
 	var animal Animal
