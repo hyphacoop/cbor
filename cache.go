@@ -123,6 +123,7 @@ func getDecodingStructType(t reflect.Type) *decodingStructType {
 	toArray := hasToArrayOption(structOptions)
 
 	var errs []error
+	unknownField := ""
 	for i := 0; i < len(flds); i++ {
 		if flds[i].keyAsInt {
 			nameAsInt, numErr := strconv.Atoi(flds[i].name)
@@ -131,6 +132,16 @@ func getDecodingStructType(t reflect.Type) *decodingStructType {
 				break
 			}
 			flds[i].nameAsInt = int64(nameAsInt)
+		}
+		if flds[i].unknown {
+			if unknownField != "" {
+				errs = append(errs, fmt.Errorf("cbor: two or more fields of %v are marked unknown: %q and %q", t, unknownField, flds[i].name))
+				break
+			} else if flds[i].typ.Kind() != reflect.Map {
+				errs = append(errs, fmt.Errorf("cbor: field %q of %v must be a map[any]any to be marked unknown", flds[i].name, t))
+				break
+			}
+			unknownField = flds[i].name
 		}
 
 		flds[i].typInfo = getTypeInfo(flds[i].typ)
@@ -174,6 +185,7 @@ type encodingStructType struct {
 	fields             fields
 	bytewiseFields     fields
 	lengthFirstFields  fields
+	unknownField       *field
 	omitEmptyFieldsIdx []int
 	err                error
 	toArray            bool
@@ -240,9 +252,17 @@ func getEncodingStructType(t reflect.Type) (*encodingStructType, error) {
 	var err error
 	var hasKeyAsInt bool
 	var hasKeyAsStr bool
+	var unknownField *field
 	var omitEmptyIdx []int
 	e := getEncodeBuffer()
 	for i := 0; i < len(flds); i++ {
+		if flds[i].unknown {
+			unknownField = flds[i]
+			flds[i] = flds[len(flds)-1]
+			flds = flds[:len(flds)-1]
+			i--
+			continue
+		}
 		// Get field's encodeFunc
 		flds[i].ef, flds[i].ief, flds[i].izf = getEncodeFunc(flds[i].typ)
 		if flds[i].ef == nil {
@@ -319,6 +339,7 @@ func getEncodingStructType(t reflect.Type) (*encodingStructType, error) {
 		bytewiseFields:     bytewiseFields,
 		lengthFirstFields:  lengthFirstFields,
 		omitEmptyFieldsIdx: omitEmptyIdx,
+		unknownField:       unknownField,
 	}
 
 	encodingStructTypeCache.Store(t, structType)

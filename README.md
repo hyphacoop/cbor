@@ -355,9 +355,15 @@ err = em.MarshalToBuffer(v, &buf) // encode v to provided buf
 
 ### Struct Tags
 
-Struct tag options (`toarray`, `keyasint`, `omitempty`, `omitzero`) reduce encoded size of structs.
+Struct tag options (`toarray`, `keyasint`, `omitempty`, `omitzero`, `unknown`) reduce encoded size of structs.
 
 As a special case, struct field tag "-" omits the field.
+
+- `toarray`: encode struct as CBOR array without field names
+- `keyasint`: encode struct field names as integer keys
+- `omitempty`: omit field if value is empty
+- `omitzero`: omit field if value is zero
+- `unknown`: collect unrecognized fields during decoding into this map field
 
 <details><summary> 🔎&nbsp; Example encoding with struct field tag "-"</summary><p/>
 
@@ -480,8 +486,68 @@ JSON: {"Foo":{"Qux":{}}}
 </details>
 
 <details><summary> 🔎&nbsp; Example using struct tag options</summary><p/>
-	
+
 ![alt text](https://github.com/fxamacker/images/raw/master/cbor/v2.3.0/cbor_struct_tags_api.svg?sanitize=1 "CBOR API and Go Struct Tags")
+
+</details>
+
+<details><summary> 🔎&nbsp; Example using unknown field collection</summary><p/>
+
+The `unknown` struct tag collects unrecognized fields during decoding. This is useful for:
+- Forward compatibility: handle data with extra fields
+- Protocol flexibility: preserve unknown extensions
+- Mixed key types: support `map[any]any` for non-string keys
+
+```Go
+package main
+
+import (
+	"fmt"
+	"github.com/fxamacker/cbor/v2"
+)
+
+type Person struct {
+	Name    string         `cbor:"name"`
+	Age     int            `cbor:"age"`
+	Unknown map[string]any `cbor:",unknown"`
+}
+
+func main() {
+	// Decode CBOR with extra fields
+	data := []byte{
+		0xa4,                   // map(4)
+		0x64, 0x6e, 0x61, 0x6d, 0x65, // "name"
+		0x64, 0x4a, 0x6f, 0x68, 0x6e, // "John"
+		0x63, 0x61, 0x67, 0x65, // "age"
+		0x18, 0x1e,             // 30
+		0x66, 0x65, 0x78, 0x74, 0x72, 0x61, // "extra"
+		0x66, 0x76, 0x61, 0x6c, 0x75, 0x65, // "value"
+		0x67, 0x75, 0x6e, 0x6b, 0x6e, 0x6f, 0x77, 0x6e, // "unknown"
+		0x18, 0x2a, // 42
+	}
+
+	var p Person
+	cbor.Unmarshal(data, &p)
+
+	fmt.Printf("Name: %s, Age: %d\n", p.Name, p.Age)
+	fmt.Printf("Unknown fields: %+v\n", p.Unknown)
+	// Output:
+	// Name: John, Age: 30
+	// Unknown fields: map[extra:value unknown:42]
+}
+```
+
+For non-string map keys, use `map[any]any`:
+
+```Go
+type FlexibleStruct struct {
+	ID      int            `cbor:"id"`
+	Unknown map[any]any `cbor:",unknown"`
+}
+// Can handle string, int, float64, bool keys, etc.
+```
+
+<hr/>
 
 </details>
 

@@ -569,3 +569,68 @@ func Example_webAuthn() {
 	}
 	fmt.Printf("%+v", v)
 }
+
+func ExampleUnmarshal_unknownFields() {
+	// Define struct with unknown field collection
+	type Config struct {
+		Host    string         `cbor:"host"`
+		Port    int            `cbor:"port"`
+		Unknown map[string]any `cbor:",unknown"` // Collects unrecognized fields
+	}
+
+	// CBOR data with known and unknown fields
+	// map(4): host="localhost", port=8080, debug=true, extra="data"
+	data, _ := hex.DecodeString("a4" + // map(4)
+		"64686f7374" + "696c6f63616c686f7374" + // "host": "localhost"
+		"64706f7274" + "191f90" + // "port": 8080
+		"656465627567" + "f5" + // "debug": true (unknown)
+		"656578747261" + "6464617461") // "extra": "data" (unknown)
+
+	var config Config
+	if err := cbor.Unmarshal(data, &config); err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+
+	fmt.Printf("Host: %s\n", config.Host)
+	fmt.Printf("Port: %d\n", config.Port)
+	fmt.Printf("Debug: %v\n", config.Unknown["debug"])
+	fmt.Printf("Extra: %v\n", config.Unknown["extra"])
+	// Output:
+	// Host: localhost
+	// Port: 8080
+	// Debug: true
+	// Extra: data
+}
+
+func ExampleUnmarshal_unknownFieldsMixedKeys() {
+	// Use map[any]any to support non-string keys
+	type Flexible struct {
+		ID      int         `cbor:"id"`
+		Unknown map[any]any `cbor:",unknown"`
+	}
+
+	// CBOR data with string, int, and float64 keys
+	// map(4): id=1, "name"="test", 42="intkey", 3.14="floatkey"
+	data, _ := hex.DecodeString("a4" + // map(4)
+		"626964" + "01" + // "id": 1
+		"646e616d65" + "6474657374" + // "name": "test"
+		"182a" + "66696e746b6579" + // 42: "intkey"
+		"fb40091eb851eb851f" + "68666c6f61746b6579") // 3.14: "floatkey"
+
+	var obj Flexible
+	if err := cbor.Unmarshal(data, &obj); err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+
+	fmt.Printf("ID: %d\n", obj.ID)
+	fmt.Printf("Name: %v\n", obj.Unknown["name"])
+	fmt.Printf("Int key 42: %v\n", obj.Unknown[int64(42)])
+	fmt.Printf("Float key 3.14: %v\n", obj.Unknown[3.14])
+	// Output:
+	// ID: 1
+	// Name: test
+	// Int key 42: intkey
+	// Float key 3.14: floatkey
+}

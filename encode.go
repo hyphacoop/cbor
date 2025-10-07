@@ -1566,83 +1566,252 @@ func encodeStructToArray(e *bytes.Buffer, em *encMode, v reflect.Value) (err err
 	return nil
 }
 
-func encodeStruct(e *bytes.Buffer, em *encMode, v reflect.Value) (err error) {
-	structType, err := getEncodingStructType(v.Type())
-	if err != nil {
-		return err
+// fieldEntry represents either a known struct field or an unknown field entry
+type fieldEntry struct {
+	isUnknown bool
+	field     *field        // for known fields
+	key       reflect.Value // for unknown fields
+	value     reflect.Value // for unknown fields
+	cborKey   []byte        // encoded CBOR key for sorting (computed when needed)
+}
+
+// fieldEntries holds all fields (known + unknown) for struct encoding
+type fieldEntries struct {
+	entries []fieldEntry
+}
+
+func (f *fieldEntries) Len() int { return len(f.entries) }
+
+func (f *fieldEntries) Sort(em *encMode) {
+	if (em.sort == SortLengthFirst || em.sort == SortBytewiseLexical) && len(f.entries) > 1 {
+		sorter := &fieldEntrySorter{
+			entries:   f.entries,
+			sortMode:  em.sort,
+			fieldName: em.fieldName,
+		}
+		sort.Sort(sorter)
+	}
+}
+
+func (f *fieldEntries) Get(index int) fieldEntry {
+	return f.entries[index]
+}
+
+// fieldEntrySorter sorts fieldEntry slices
+type fieldEntrySorter struct {
+	entries   []fieldEntry
+	sortMode  SortMode
+	fieldName FieldNameMode
+}
+
+func (x *fieldEntrySorter) Len() int {
+	return len(x.entries)
+}
+
+func (x *fieldEntrySorter) Swap(i, j int) {
+	x.entries[i], x.entries[j] = x.entries[j], x.entries[i]
+}
+
+func (x *fieldEntrySorter) Less(i, j int) bool {
+	keyI := x.getCborKey(i)
+	keyJ := x.getCborKey(j)
+
+	if x.sortMode == SortLengthFirst {
+		if len(keyI) != len(keyJ) {
+			return len(keyI) < len(keyJ)
+		}
+	}
+	return bytes.Compare(keyI, keyJ) <= 0
+}
+
+func (x *fieldEntrySorter) getCborKey(i int) []byte {
+	entry := &x.entries[i]
+	if entry.cborKey != nil {
+		return entry.cborKey
 	}
 
-	flds := structType.getFields(em)
+	if entry.isUnknown {
+		// Encode unknown field key using its actual type
+		var buf bytes.Buffer
+		// For string keys, respect the fieldName encoding mode
+		if entry.key.Kind() == reflect.String {
+			keyStr := entry.key.String()
+			if x.fieldName == FieldNameToByteString {
+				encodeHead(&buf, byte(cborTypeByteString), uint64(len(keyStr)))
+			} else {
+				encodeHead(&buf, byte(cborTypeTextString), uint64(len(keyStr)))
+			}
+			buf.WriteString(keyStr)
+		} else {
+			// For non-string keys, encode using the standard encoder
+			// We use a temporary encMode with no special settings
+			tempEm := encMode{}
+			encode(&buf, &tempEm, entry.key)
+		}
+		entry.cborKey = buf.Bytes()
+	} else {
+		// Use known field's pre-encoded key
+		if x.fieldName == FieldNameToByteString && !entry.field.keyAsInt {
+			entry.cborKey = entry.field.cborNameByteString
+		} else {
+			entry.cborKey = entry.field.cborName
+		}
+	}
+
+	return entry.cborKey
+}
+
+// buildFieldEntries creates a collection of all fields (known + unknown) for encoding
+func buildFieldEntries(flds fields, unknownFieldValue reflect.Value) fieldEntries {
+	allEntries := make([]fieldEntry, len(flds)+len(unknownFieldValue.MapKeys()))
+
+	// Add known fields
+	for i, f := range flds {
+		allEntries[i] = fieldEntry{
+			isUnknown: false,
+			field:     f,
+		}
+	}
+
+	// Add unknown fields
+	for i, key := range unknownFieldValue.MapKeys() {
+		value := unknownFieldValue.MapIndex(key)
+		allEntries[i+len(flds)] = fieldEntry{
+			isUnknown: true,
+			key:       key,
+			value:     value,
+		}
+	}
+
+	return fieldEntries{entries: allEntries}
+}
+
+// encodeKnownField encodes a single known struct field
+func encodeKnownField(e *bytes.Buffer, em *encMode, v reflect.Value, f *field) (encoded bool, err error) {
+	var fv reflect.Value
+	if len(f.idx) == 1 {
+		fv = v.Field(f.idx[0])
+	} else {
+		// Get embedded field value.  No error is expected.
+		fv, _ = getFieldValue(v, f.idx, func(reflect.Value) (reflect.Value, error) {
+			// Skip null pointer to embedded struct
+			return reflect.Value{}, nil
+		})
+		if !fv.IsValid() {
+			return false, nil
+		}
+	}
+
+	// Check omitEmpty/omitZero (shared logic)
+	if f.omitEmpty {
+		empty, err := f.ief(em, fv)
+		if err != nil {
+			return false, err
+		}
+		if empty {
+			return false, nil
+		}
+	}
+	if f.omitZero {
+		zero, err := f.izf(fv)
+		if err != nil {
+			return false, err
+		}
+		if zero {
+			return false, nil
+		}
+	}
+
+	if f.keyAsInt && em.disableKeyAsInt {
+		return false, &UnsupportedValueError{"keyasint is disabled"}
+	}
+
+	// Encode field name
+	if !f.keyAsInt && em.fieldName == FieldNameToByteString {
+		e.Write(f.cborNameByteString)
+	} else { // int or text string
+		e.Write(f.cborName)
+	}
+
+	// Encode field value
+	if err := f.ef(e, em, fv); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// encodeStructEntries encodes struct fields including unknown fields
+func encodeStructEntries(e *bytes.Buffer, em *encMode, v reflect.Value, entries fieldEntries) error {
+	// Sort entries if needed
+	entries.Sort(em)
 
 	start := 0
-	if em.sort == SortFastShuffle && len(flds) > 0 {
-		start = rand.Intn(len(flds)) //nolint:gosec // Don't need a CSPRNG for deck cutting.
+	if em.sort == SortFastShuffle && entries.Len() > 0 {
+		start = rand.Intn(entries.Len()) //nolint:gosec // Don't need a CSPRNG for deck cutting.
 	}
 
 	if b := em.encTagBytes(v.Type()); b != nil {
 		e.Write(b)
 	}
 
-	// Encode head with struct field count.
-	// Head is rewritten later if actual encoded field count is different from struct field count.
-	encodedHeadLen := encodeHead(e, byte(cborTypeMap), uint64(len(flds)))
-
+	// Encode head with total field count
+	encodedHeadLen := encodeHead(e, byte(cborTypeMap), uint64(entries.Len()))
 	kvbegin := e.Len()
 	kvcount := 0
-	for offset := 0; offset < len(flds); offset++ {
-		f := flds[(start+offset)%len(flds)]
 
-		var fv reflect.Value
-		if len(f.idx) == 1 {
-			fv = v.Field(f.idx[0])
+	// Single iteration logic for both paths
+	for offset := 0; offset < entries.Len(); offset++ {
+		// Get the entry at the current offset
+		entry := entries.Get((start + offset) % entries.Len())
+
+		if entry.isUnknown {
+			// Encode unknown field key using its actual type
+			if entry.key.Kind() == reflect.String {
+				// For string keys, respect the fieldName encoding mode
+				keyStr := entry.key.String()
+				if em.fieldName == FieldNameToByteString {
+					encodeHead(e, byte(cborTypeByteString), uint64(len(keyStr)))
+				} else {
+					encodeHead(e, byte(cborTypeTextString), uint64(len(keyStr)))
+				}
+				e.WriteString(keyStr)
+			} else {
+				// For non-string keys, encode using the standard encoder
+				if err := encode(e, em, entry.key); err != nil {
+					return err
+				}
+			}
+
+			if err := encode(e, em, entry.value); err != nil {
+				return err
+			}
+			kvcount++
 		} else {
-			// Get embedded field value.  No error is expected.
-			fv, _ = getFieldValue(v, f.idx, func(reflect.Value) (reflect.Value, error) {
-				// Skip null pointer to embedded struct
-				return reflect.Value{}, nil
-			})
-			if !fv.IsValid() {
-				continue
-			}
-		}
-		if f.omitEmpty {
-			empty, err := f.ief(em, fv)
+			// Encode known field
+			encoded, err := encodeKnownField(e, em, v, entry.field)
 			if err != nil {
 				return err
 			}
-			if empty {
-				continue
+			if encoded {
+				kvcount++
 			}
 		}
-		if f.omitZero {
-			zero, err := f.izf(fv)
-			if err != nil {
-				return err
-			}
-			if zero {
-				continue
-			}
-		}
-
-		if f.keyAsInt && em.disableKeyAsInt {
-			return &UnsupportedValueError{"keyasint is disabled"}
-		}
-
-		if !f.keyAsInt && em.fieldName == FieldNameToByteString {
-			e.Write(f.cborNameByteString)
-		} else { // int or text string
-			e.Write(f.cborName)
-		}
-
-		if err := f.ef(e, em, fv); err != nil {
-			return err
-		}
-
-		kvcount++
 	}
 
-	if len(flds) == kvcount {
-		// Encoded element count in head is the same as actual element count.
+	return rewriteMapHead(e, kvbegin, encodedHeadLen, kvcount)
+}
+
+// rewriteMapHead handles CBOR map head rewriting when field count differs
+func rewriteMapHead(e *bytes.Buffer, kvbegin, encodedHeadLen, kvcount int) error {
+	expectedHeadLen := computeHeadLen(uint64(kvcount))
+
+	if encodedHeadLen == expectedHeadLen {
+		// Head size matches, just overwrite the head with correct count
+		headStart := kvbegin - encodedHeadLen
+		// Encode directly into the existing buffer without allocating a temp buffer
+		headbuf := *bytes.NewBuffer(e.Bytes()[headStart : headStart : headStart+expectedHeadLen])
+		encodeHead(&headbuf, byte(cborTypeMap), uint64(kvcount))
 		return nil
 	}
 
@@ -1671,6 +1840,67 @@ func encodeStruct(e *bytes.Buffer, em *encMode, v reflect.Value) (err error) {
 	// garbage.
 	e.Truncate(e.Len() - excessReservedBytes)
 	return nil
+}
+
+func encodeStruct(e *bytes.Buffer, em *encMode, v reflect.Value) (err error) {
+	structType, err := getEncodingStructType(v.Type())
+	if err != nil {
+		return err
+	}
+
+	flds := structType.getFields(em)
+
+	// Fast path detection: Check if we have unknown fields
+	hasUnknownFields := false
+	var unknownFieldValue reflect.Value
+	if structType.unknownField != nil {
+		// Get the unknown field value
+		if len(structType.unknownField.idx) == 1 {
+			unknownFieldValue = v.Field(structType.unknownField.idx[0])
+		} else {
+			// Get embedded field value.  No error is expected.
+			unknownFieldValue, _ = getFieldValue(v, structType.unknownField.idx, func(reflect.Value) (reflect.Value, error) {
+				// Skip null pointer to embedded struct
+				return reflect.Value{}, nil
+			})
+		}
+		hasUnknownFields = unknownFieldValue.IsValid() && !unknownFieldValue.IsNil() && unknownFieldValue.Len() > 0
+	}
+
+	if !hasUnknownFields {
+		// Fast path: known fields only, no allocation
+		// Inline the encoding loop to avoid iterator interface allocation
+		start := 0
+		if em.sort == SortFastShuffle && len(flds) > 0 {
+			start = rand.Intn(len(flds)) //nolint:gosec // Don't need a CSPRNG for deck cutting.
+		}
+
+		if b := em.encTagBytes(v.Type()); b != nil {
+			e.Write(b)
+		}
+
+		// Encode head with struct field count
+		encodedHeadLen := encodeHead(e, byte(cborTypeMap), uint64(len(flds)))
+		kvbegin := e.Len()
+		kvcount := 0
+
+		for offset := 0; offset < len(flds); offset++ {
+			f := flds[(start+offset)%len(flds)]
+
+			encoded, err := encodeKnownField(e, em, v, f)
+			if err != nil {
+				return err
+			}
+			if encoded {
+				kvcount++
+			}
+		}
+
+		return rewriteMapHead(e, kvbegin, encodedHeadLen, kvcount)
+	}
+
+	// Slow path: known + unknown fields, with allocation
+	return encodeStructEntries(e, em, v, buildFieldEntries(flds, unknownFieldValue))
 }
 
 func encodeIntf(e *bytes.Buffer, em *encMode, v reflect.Value) error {
@@ -2034,6 +2264,23 @@ func encodeTag(e *bytes.Buffer, em *encMode, v reflect.Value) error {
 
 	// Marshal tag content
 	return encode(e, &vem, reflect.ValueOf(t.Content))
+}
+
+// computeHeadLen returns the number of bytes needed to encode a CBOR head without allocating.
+func computeHeadLen(n uint64) int {
+	if n <= maxAdditionalInformationWithoutArgument {
+		return 1
+	}
+	if n <= math.MaxUint8 {
+		return 2
+	}
+	if n <= math.MaxUint16 {
+		return 3
+	}
+	if n <= math.MaxUint32 {
+		return 5
+	}
+	return 9
 }
 
 // encodeHead writes CBOR head of specified type t and returns number of bytes written.
